@@ -86,6 +86,12 @@ revive_missing() {
     echo "$(date): librespot пропал — поднимаю заново" >> "$LOG"
     "$AP/ap2.sh" spotify
   fi
+  if soloist_ready && { [ -z "$(pids_matching "$SOLOIST/bin/soloist.bin")" ] ||
+                        [ -z "$(pids_matching "$SOLOIST/soloist.sh run-watch")" ]; }; then
+    LAST_REVIVE=$now
+    echo "$(date): Soloist пропал — поднимаю заново" >> "$LOG"
+    "$AP/ap2.sh" spotify
+  fi
   if [ -f "$AP/ytm/ytmd.py" ] && [ -z "$(pids_matching "$AP/ytm/ytmd.py")" ]; then
     LAST_REVIVE=$now
     echo "$(date): ytmd пропал — поднимаю заново" >> "$LOG"

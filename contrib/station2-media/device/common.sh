@@ -7,6 +7,14 @@ MEDIAD_BIN=/system/vendor/quasar/maind
 MEDIAD_MATCH="$MEDIAD_BIN --mediad"
 # Имя колонки в Spotify Connect (librespot) и в поиске устройства через Web API
 SPOTIFY_NAME="Станция 2"
+# Кривая громкости librespot в дБ: на полной шкале регулятора
+# (36 дБ) половина ползунка звучит слишком тихо, ~25 дБ на слух совпадает с привычным
+# шагом AirPlay (24 и меньше librespot считает «узким аппаратным» регулятором и
+# переходит на линейную шкалу)
+SPOTIFY_VOLUME_RANGE=25
+# Spotify Soloist (soloist.sh) — вместо librespot, когда тот выключен
+SOLOIST=/data/local/opt/soloist
+soloist_ready() { [ ! -x "$B/librespot" ] && [ -s "$SOLOIST/etc/api-key" ]; }
 export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/ap2_bus
 # из SSH-сессии dropbear приходит PATH=/usr/bin:/bin, а start-stop-daemon лежит в /sbin
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin
@@ -60,10 +68,18 @@ start_mediad() {
   PIDS=$(pids_matching "$MEDIAD_MATCH")
   N=$(printf '%s\n' "$PIDS" | grep -c .)
   if [ "$N" -gt 1 ]; then
-    for p in $PIDS; do kill -9 "$p" 2>/dev/null; done
+    # Экземпляр лаунчера оставляем, убираем только свои: если убить и его, лаунчер
+    # поднимает новый через 600 с, и дубль с убийством повторяются каждые 10 минут
+    L=$(pids_matching "quasar_launcher2" | head -1)
+    K=0
+    for p in $PIDS; do
+      [ -n "$L" ] && [ "$(awk '/^PPid:/ { print $2 }' "/proc/$p/status" 2>/dev/null)" = "$L" ] && continue
+      kill -9 "$p" 2>/dev/null
+      K=$((K + 1))
+    done
     sleep 2
-    echo "$(date): убрал дубли mediad (было $N)" >> "$LOGD/owner.log"
-    N=0
+    echo "$(date): убрал дубли mediad (было $N, убрано $K)" >> "$LOGD/owner.log"
+    N=$((N - K))
   fi
   if [ "$N" -eq 0 ]; then
     cd /data/quasar 2>/dev/null || cd /
