@@ -11,10 +11,6 @@
 SELF=$AP/ap2.sh
 BUS=/run/dbus/ap2_bus
 SPOTIFY_PORT=4371
-# Кривая громкости Spotify в дБ: на полной шкале регулятора (36 дБ) половина ползунка
-# звучит слишком тихо, ~25 дБ на слух совпадает с привычным шагом AirPlay (24 и меньше
-# librespot считает «узким аппаратным» регулятором и переходит на линейную шкалу)
-SPOTIFY_VOLUME_RANGE=25
 
 # start-stop-daemon -x /bin/sh считает процесс запущенным, если жив любой /bin/sh,
 # поэтому всегда свой pid-файл, а старый удаляем перед запуском.
@@ -109,8 +105,12 @@ run_spotify() {
     --zeroconf-backend avahi --zeroconf-port "$SPOTIFY_PORT" >>"$LOGD/spotify.log" 2>&1
 }
 
+# librespot выключен (chmod -x) и поставлен Soloist с ключом — Spotify Connect даёт он
 start_spotify() {
-  [ -x "$B/librespot" ] || return 0
+  if [ ! -x "$B/librespot" ]; then
+    soloist_ready && "$SOLOIST/soloist.sh" start
+    return 0
+  fi
   [ -n "$(pids_matching "$B/librespot")" ] && return 0
   prime_volume
   spawn /run/ap2-spotify.pid /bin/sh "$SELF" run-spotify
@@ -167,6 +167,7 @@ stop_all() {
            "$B/ytm-dec" "$B/aplay -q -D youtube" avahi-daemon "$B/nqptp" "$B/dbus-daemon"; do
     for p in $(pids_matching "$m"); do kill "$p" 2>/dev/null; done
   done
+  soloist_ready && "$SOLOIST/soloist.sh" stop
   sleep 1
   rm -f "$BUS"
   # распорядитель мог оставить Алису без медиа-демона

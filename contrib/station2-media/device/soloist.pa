@@ -1,0 +1,5 @@
+# PulseAudio для Soloist (soloist.sh run-pulse): только виртуальный выход и сокет.
+# В ALSA звук переносит soloist.sh run-watch, пока Soloist играет.
+load-module module-null-sink sink_name=soloist rate=44100 channels=2 format=s16le
+load-module module-native-protocol-unix auth-anonymous=1 socket=/run/soloist/native
+set-default-sink soloist

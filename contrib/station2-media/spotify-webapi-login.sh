@@ -51,7 +51,7 @@ class Callback(http.server.BaseHTTPRequestHandler):
 
 server = http.server.HTTPServer(("127.0.0.1", port), Callback)
 webbrowser.open(url)
-print("Открыл страницу входа Spotify в браузере…", file=sys.stderr)
+print("Открыл страницу входа Spotify в браузере. Если не открылась, вот ссылка:", url, sep="\n", file=sys.stderr)
 while not result:
     server.handle_request()
 if not result.get("code"):
