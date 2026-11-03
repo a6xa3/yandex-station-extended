@@ -129,8 +129,9 @@ start_ytm() {
 }
 
 # Голосом в Spotify (voice-spotify.sh): только если есть ключи Web API
+# Слушатель нужен и без ключей Spotify Web API: он же приглушает AirPlay, пока Алиса слушает
 start_voice() {
-  [ -s "$E/spotify-webapi.json" ] || return 0
+  [ -x "$B/alice-text" ] || return 0
   [ -n "$(pids_matching "$AP/voice-spotify.sh")" ] && return 0
   spawn /run/ap2-voice.pid /bin/sh "$AP/voice-spotify.sh"
 }

@@ -7,13 +7,17 @@
 #
 #   ./install.sh <IP колонки>             # оба этапа
 #   ./install.sh <IP колонки> --ssh-only  # SSH уже есть — только этап 2
+# Другая колонка на той же платформе (Мини 2): свой ключ, known_hosts и имя в AirPlay/Spotify
+#   KEY=~/.ssh/yandex_mini2 KNOWN=~/.ssh/known_hosts_mini2 NAME="Станция Мини 2" ./install.sh <IP> --ssh-only
 set -euo pipefail
 
 IP=${1:?"использование: $0 <IP колонки> [--ssh-only]"}
 MODE=${2:-}
 HERE=$(cd "$(dirname "$0")" && pwd)
 BUNDLE=$HERE/build/out/ap2
-KEY=$HOME/.ssh/yandex_station2
+KEY=${KEY:-$HOME/.ssh/yandex_station2}
+KNOWN=${KNOWN:-$HERE/known_hosts}
+NAME=${NAME:-}
 BACKUP=$HERE/backup
 AP=/data/local/opt/ap2
 SERIAL=$IP:5555
@@ -27,7 +31,7 @@ adb_() { adb -s "$SERIAL" "$@"; }
 sh_() { adb_ shell "$1" | tr -d '\r'; }
 ssh_() {
   ssh -i "$KEY" -p 2222 -o IdentitiesOnly=yes -o ConnectTimeout=5 -o BatchMode=yes \
-      -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HERE/known_hosts" \
+      -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" \
       "root@$IP" "$@"
 }
 # Владелец root в архиве: --uid/--gid у bsdtar (macOS), --owner/--group у GNU tar (Linux)
@@ -47,8 +51,12 @@ mkdir -p "$TMP/ap2/etc"
 cp -R "$BUNDLE/bin" "$BUNDLE/lib" "$TMP/ap2/"
 cp "$HERE/device/"*.sh "$TMP/ap2/"
 cp "$HERE/device/etc/"* "$TMP/ap2/etc/"
-[ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C yandex-station2 -f "$KEY"
+[ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C "$(basename "$KEY")" -f "$KEY"
 cp "$KEY.pub" "$TMP/ap2/etc/authorized_keys"
+if [ -n "$NAME" ]; then
+  sed -i "s/^SPOTIFY_NAME=.*/SPOTIFY_NAME=\"$NAME\"/" "$TMP/ap2/common.sh"
+  sed -i "s/^\( *name = \)\"[^\"]*\"/\1\"$NAME\"/" "$TMP/ap2/etc/shairport-sync.conf"
+fi
 # Имя хоста для avahi — то, что колонка уже публикует по mDNS (hostname у неё другой)
 # dig есть в macOS; в Linux его часто нет (dnsutils), там пробуем avahi-resolve-address
 MDNS=
@@ -76,6 +84,14 @@ echo "    ok: ssh -i $KEY -p 2222 root@$IP"
 echo "==> снимок состояния колонки"
 ssh_ 'cat /proc/asound/cards; ls /dev/snd; echo "hostname: $(hostname)"; grep "^root:" /etc/passwd; df -h /data; ps w | grep "[m]aind"' \
   > "$BACKUP/probe-$(date +%Y%m%d-%H%M%S).txt"
+
+# Регулятор Master у Станции 2 моно, у Мини 2 стерео: softvol должен совпасть по числу
+# каналов с уже созданным регулятором, иначе ALSA его не откроет
+CH=$(ssh_ "amixer cget name='Master Playback Volume'" | sed -n 's/.*,values=\([0-9]*\),min=.*/\1/p')
+[ -n "$CH" ] || die "нет регулятора Master Playback Volume"
+sed -i "s/name \"Master Playback Volume\"; card 0; count 1/name \"Master Playback Volume\"; card 0; count $CH/" \
+  "$TMP/ap2/etc/asound.conf"
+echo "    Master: каналов $CH"
 
 echo "==> этап 2: AirPlay 2 по SSH"
 # с --ssh-only этапа 1 не было, и каталога может не быть

@@ -7,6 +7,7 @@
 | Мини 3 с уже установленным пакетом `/data/shairport` | [чиним две известные проблемы скриптом](#fix) |
 | Лайт 2 (Plum) | [своя сборка, AirPlay виден Алисе как Bluetooth-телефон](#lite2) |
 | Станция 2 | [готовый набор из исходников](#station-2-bundle) |
+| Мини 2 | [тот же набор, что у Станции 2](#station-2-mini2) |
 | Лайт 1 (Micro) | [самостоятельный приёмник AirPlay 2, без интеграции с Алисой](#lite1) |
 | Станция 1 с Android 6 и AliceBridge | [установка AirPlay 2 одним скриптом](#station-1) |
 
@@ -310,6 +311,24 @@ cd contrib/station2-media
 - имя хоста для avahi берёт из mDNS колонки (`hostname` у неё другой).
 
 На колонке: `/data/local/opt/ap2/ap2.sh start|stop|restart|status`.
+
+### Станция Мини 2 { #station-2-mini2 }
+
+**Проверено на Мини 2 (`yandexmini_2`, прошивка `0.369.1.46…299`) 04.11.2026:** тот же набор, звук с iPhone
+идёт, после перезагрузки всё поднимается само. Отличие в железе — регулятор `Master` стерео (у Станции 2 моно);
+`install.sh` берёт число каналов с колонки и подставляет его в `asound.conf`. Ключ, `known_hosts` и имя задаются
+переменными:
+
+```sh
+KEY=~/.ssh/yandex_mini2 KNOWN=~/.ssh/known_hosts_mini2 NAME="Станция Мини 2" ./install.sh <IP> --ssh-only
+```
+
+- mDNS-имя колонки (`yandexmini-2-<серийный номер>`) из WSL `dig` не получит — запишите его в
+  `/data/local/opt/ap2/etc/hostname` вручную (обратный mDNS-запрос `PTR` к колонке на порт 5353) и `ap2.sh restart`.
+- Spotify (Soloist) не помещается: на `/data` 87 МБ, а ему нужно 51 МБ и кэш от 100 МБ; librespot выключен
+  (`chmod -x …/ap2/bin/librespot`).
+- Если SSH до установки поднимали отдельным dropbear (`/etc/init.d/S99zdropbear`), уберите его: порт `2222` занимает
+  dropbear набора, и у него свой ключ хоста.
 
 ### Громкость
 
