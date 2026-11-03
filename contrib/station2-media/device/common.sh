@@ -83,8 +83,24 @@ start_mediad() {
   fi
   if [ "$N" -eq 0 ]; then
     cd /data/quasar 2>/dev/null || cd /
-    MALLOC_ARENA_MAX=2 CA_CERTIFICATES=/system/vendor/quasar/ca-certificates.crt \
-      nohup "$MEDIAD_BIN" --mediad >> /data/quasar/mediad.log 2>&1 < /dev/null &
+    envs=$(mediad_env)
+    [ -n "$envs" ] || envs="MALLOC_ARENA_MAX=2
+CA_CERTIFICATES=/system/vendor/quasar/ca-certificates.crt"
+    ( IFS='
+'
+      # shellcheck disable=SC2086
+      exec env $envs nohup "$MEDIAD_BIN" --mediad ) >> /data/quasar/mediad.log 2>&1 < /dev/null &
     echo "$(date): mediad поднят" >> "$LOGD/owner.log"
   fi
+}
+
+# Окружение mediad — из файла, с которым сейчас запущен лаунчер quasar: Alisa Voice запускает
+# его со своим launch.bridge.json, где mediad получает LD_PRELOAD с фильтром речи Алисы.
+# LD_LIBRARY_PATH лаунчера тоже передаём: без него preload не найдёт библиотеки.
+mediad_env() {
+  lp=$(pids_matching "quasar_launcher2" | head -1)
+  [ -n "$lp" ] || return 0
+  f=$(tr '\0' '\n' < "/proc/$lp/cmdline" | sed -n 2p)
+  tr '\0' '\n' < "/proc/$lp/environ" 2>/dev/null | grep '^LD_LIBRARY_PATH='
+  [ -f "$f" ] && "$B/jq" -r '.nodes[]?.tasks[]? | select((.arg // []) | index("--mediad")) | .envs[]?' "$f" 2>/dev/null
 }

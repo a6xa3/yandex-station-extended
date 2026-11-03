@@ -23,17 +23,21 @@ spawn() { # pidfile программа аргументы...
 start_ssh() {
   [ -n "$(pids_matching "$B/dropbear")" ] && return 0
   [ -s "$E/dropbear_ed25519" ] || "$B/dropbearkey" -t ed25519 -f "$E/dropbear_ed25519" >/dev/null 2>&1
-  # dropbear ищет ключи в домашнем каталоге root из /etc/passwd
+  # dropbear ищет ключи в домашнем каталоге root из /etc/passwd. Свои ключи дописываем,
+  # а не заменяем файл: туда же добавляют свои ключи другие установщики (Alisa Voice).
   home=$(awk -F: '$1 == "root" { print $6 }' /etc/passwd)
-  if [ -n "$home" ] && [ -s "$E/authorized_keys" ] &&
-     ! cmp -s "$E/authorized_keys" "$home/.ssh/authorized_keys"; then
-    # /root лежит на корне, а он смонтирован только для чтения
-    mount -o remount,rw / 2>/dev/null
-    mkdir -p "$home/.ssh" && cp "$E/authorized_keys" "$home/.ssh/authorized_keys"
-    chmod 700 "$home/.ssh"
-    chmod 600 "$home/.ssh/authorized_keys"
-    sync
-    mount -o remount,ro / 2>/dev/null
+  f=$home/.ssh/authorized_keys
+  if [ -n "$home" ] && [ -s "$E/authorized_keys" ]; then
+    missing=$(grep -vxF -f "$f" "$E/authorized_keys" 2>/dev/null || cat "$E/authorized_keys")
+    if [ -n "$missing" ]; then
+      # /root лежит на корне, а он смонтирован только для чтения; ссылку на /data правим без remount
+      [ -L "$f" ] || mount -o remount,rw / 2>/dev/null
+      mkdir -p "$home/.ssh" && printf '%s\n' "$missing" >> "$f"
+      chmod 700 "$home/.ssh"
+      chmod 600 "$f"
+      sync
+      [ -L "$f" ] || mount -o remount,ro / 2>/dev/null
+    fi
   fi
   "$B/dropbear" -r "$E/dropbear_ed25519" -p 2222 -s -P /run/ap2-dropbear.pid 2>>"$LOGD/dropbear.log"
 }
