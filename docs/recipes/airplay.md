@@ -320,11 +320,17 @@ cd contrib/station2-media
 переменными:
 
 ```sh
-KEY=~/.ssh/yandex_mini2 KNOWN=~/.ssh/known_hosts_mini2 NAME="Станция Мини 2" ./install.sh <IP> --ssh-only
+MDNS=yandexmini-2-<серийный номер> KEY=~/.ssh/yandex_mini2 KNOWN=~/.ssh/known_hosts_mini2 \
+  NAME="Станция Мини 2" ./install.sh <IP> --ssh-only
 ```
 
-- mDNS-имя колонки (`yandexmini-2-<серийный номер>`) из WSL `dig` не получит — запишите его в
-  `/data/local/opt/ap2/etc/hostname` вручную (обратный mDNS-запрос `PTR` к колонке на порт 5353) и `ap2.sh restart`.
+- mDNS-имя колонки (`yandexmini-2-<серийный номер>`) из WSL `dig` не получит: многоадресного mDNS в WSL2 нет.
+  Передайте его в `MDNS=` (имя узнаётся обратным mDNS-запросом `PTR` к колонке на порт 5353). Без `MDNS=` установщик
+  оставляет уже записанный `etc/hostname`.
+- **Громкость.** На Мини 2 голос Алисы идёт через системный `softvol` на том же `Master` (стандартные −51 дБ), а на
+  Станции 2 — мимо. `install.sh` это видит по `pcm.!default` в `/etc/asound.conf` и ставит нашей музыке ту же шкалу
+  −51 дБ и кривую ползунка «как у Алисы»: процент ползунка iPhone = процент `Master` (10% — как Алиса на 1, 50% — на 5).
+  Со шкалой 36 дБ и долей амплитуды, как на Станции 2, первый шаг iPhone звучал как Алиса на 5. Проверено 04.11.2026.
 - Spotify (Soloist) не помещается: на `/data` 87 МБ, а ему нужно 51 МБ и кэш от 100 МБ; librespot выключен
   (`chmod -x …/ap2/bin/librespot`).
 - Если SSH до установки поднимали отдельным dropbear (`/etc/init.d/S99zdropbear`), уберите его: порт `2222` занимает

@@ -29,23 +29,32 @@ AIRPLAY_OUT="aplay -q -D airplay_shared"
 airplay_shared() { grep -q '^ *output_backend = "pipe"' "$E/shairport-sync.conf" 2>/dev/null; }
 
 # Громкость с телефона (Spotify, AirPlay) -> Master. Ползунок — доля амплитуды, как у
-# большинства колонок: 13% ≈ −18 дБ (Алиса на 5), 50% = −6 дБ. Master 0..255 — это
-# −36..0 дБ (asound.conf), шаг 36/255 дБ = множитель амплитуды 1,016387; awk на колонке
-# без математики, поэтому степень — циклом. Ползунок — 0..65536.
+# большинства колонок: 13% ≈ −18 дБ, 50% = −6 дБ. Master 0..255 — это −36..0 дБ
+# (asound.conf), шаг 36/255 дБ = множитель амплитуды 1,016387; awk на колонке без
+# математики, поэтому степень — циклом. Ползунок — 0..65536.
+# Шкала колонки: у Станции 2 голос Алисы мимо Master — 36 дБ, у Мини 2 Алиса играет через
+# системный softvol на Master (−51 дБ) — install.sh ставит ту же шкалу, шаг 51/255 дБ = 1,023293
+MASTER_STEP_PPM=1016387
+# Кривая ползунка: amplitude — доля амплитуды (выше); alice — как у самой Алисы, процент
+# ползунка = процент Master (set_volume.sh). На Мини 2 Алиса звучит через Master, и
+# доля амплитуды давала на первом шаге iPhone −24 дБ — как Алиса на 5. install.sh ставит alice.
+VOLUME_CURVE=amplitude
 master_get() {
   ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -D default get Master |
     sed -n 's/.*Playback \([0-9]*\) \[.*/\1/p' | head -1
 }
 master_set() { ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -q -D default set Master "$1"; }
 stream_of() { # Master -> ползунок 0..65536
+  [ "$VOLUME_CURVE" = alice ] && { echo $(($1 * 65536 / 255)); return; }
   x=$((65536 << 16)) i=$1
-  while [ "$i" -lt 255 ]; do x=$((x * 1000000 / 1016387)) i=$((i + 1)); done
+  while [ "$i" -lt 255 ]; do x=$((x * 1000000 / MASTER_STEP_PPM)) i=$((i + 1)); done
   echo $((x >> 16))
 }
 master_of() { # ползунок -> ближайший сверху Master
+  [ "$VOLUME_CURVE" = alice ] && { echo $((($1 * 255 + 65535) / 65536)); return; }
   t=$(($1 << 16)) x=$((65536 << 16)) m=255
-  while [ "$m" -gt 0 ] && [ $((x * 1000000 / 1016387)) -ge "$t" ]; do
-    x=$((x * 1000000 / 1016387)) m=$((m - 1))
+  while [ "$m" -gt 0 ] && [ $((x * 1000000 / MASTER_STEP_PPM)) -ge "$t" ]; do
+    x=$((x * 1000000 / MASTER_STEP_PPM)) m=$((m - 1))
   done
   echo "$m"
 }

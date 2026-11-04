@@ -97,6 +97,18 @@ sed -i "s/name \"Master Playback Volume\"; card 0; count 1/name \"Master Playbac
   "$TMP/ap2/etc/asound.conf" "$TMP/ap2/etc/asound-shared.conf"
 echo "    Master: каналов $CH"
 
+# Если голос Алисы идёт через системный softvol на Master (Мини 2), наша музыка должна
+# ослабляться по той же шкале — стандартные −51 дБ, иначе внизу ползунка она на 15 дБ громче
+# Алисы. У Станции 2 Алиса мимо Master, остаётся наша шкала 36 дБ.
+if ssh_ 'sed -n "/pcm.!default/,/^}/p" /etc/asound.conf' | grep -q 'Master Playback Volume'; then
+  for f in asound.conf asound-shared.conf; do
+    awk '/name "Master Playback Volume"/ { m = 1 } m && /min_dB/ { sub(/-36\.0/, "-51.0"); m = 0 } { print }' \
+      "$TMP/ap2/etc/$f" > "$TMP/$f" && mv "$TMP/$f" "$TMP/ap2/etc/$f"
+  done
+  sed -i 's/^MASTER_STEP_PPM=.*/MASTER_STEP_PPM=1023293/; s/^VOLUME_CURVE=.*/VOLUME_CURVE=alice/' "$TMP/ap2/common.sh"
+  echo "    Master: шкала 51 дБ и кривая ползунка как у Алисы"
+fi
+
 echo "==> этап 2: AirPlay 2 по SSH"
 # с --ssh-only этапа 1 не было, и каталога может не быть
 tar_ -C "$TMP" -czf - ap2 | ssh_ "mkdir -p /data/local/opt && gzip -dc | tar -xf - -C /data/local/opt && echo ok" | grep -q ok ||
