@@ -59,15 +59,18 @@ if [ -n "$NAME" ]; then
   sed -i "s/^\( *name = \)\"[^\"]*\"\(.*как колонка видна\)/\1\"$NAME\"\2/" "$TMP/ap2/etc/shairport-sync.conf"
 fi
 # Имя хоста для avahi — то, что колонка уже публикует по mDNS (hostname у неё другой)
-# dig есть в macOS; в Linux его часто нет (dnsutils), там пробуем avahi-resolve-address
-MDNS=
-if command -v dig >/dev/null; then
+# dig есть в macOS; в Linux его часто нет (dnsutils), там пробуем avahi-resolve-address.
+# В WSL2 многоадресного mDNS нет — имя можно задать явно: MDNS=<имя без .local>.
+# Не найдено — на колонке остаётся уже записанный etc/hostname.
+MDNS=${MDNS:-}
+if [ -n "$MDNS" ]; then :
+elif command -v dig >/dev/null; then
   MDNS=$(dig +short +time=2 +tries=1 -x "$IP" @224.0.0.251 -p 5353 2>/dev/null | head -1 | sed 's/\.local\.$//' || true)
 elif command -v avahi-resolve-address >/dev/null; then
   MDNS=$(avahi-resolve-address "$IP" 2>/dev/null | awk '{ print $2 }' | sed 's/\.local$//' || true)
 fi
 [ -n "$MDNS" ] && echo "$MDNS" > "$TMP/ap2/etc/hostname"
-echo "    mDNS-имя: ${MDNS:-не найдено, возьмём hostname колонки}"
+echo "    mDNS-имя: ${MDNS:-не найдено — оставляю etc/hostname колонки (или hostname, если его нет)}"
 
 if [ "$MODE" != "--ssh-only" ]; then
   echo "==> этап 1: SSH по ADB $SERIAL"
