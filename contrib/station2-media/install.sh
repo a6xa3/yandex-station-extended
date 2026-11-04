@@ -90,7 +90,7 @@ ssh_ 'cat /proc/asound/cards; ls /dev/snd; echo "hostname: $(hostname)"; grep "^
 CH=$(ssh_ "amixer cget name='Master Playback Volume'" | sed -n 's/.*,values=\([0-9]*\),min=.*/\1/p')
 [ -n "$CH" ] || die "нет регулятора Master Playback Volume"
 sed -i "s/name \"Master Playback Volume\"; card 0; count 1/name \"Master Playback Volume\"; card 0; count $CH/" \
-  "$TMP/ap2/etc/asound.conf"
+  "$TMP/ap2/etc/asound.conf" "$TMP/ap2/etc/asound-shared.conf"
 echo "    Master: каналов $CH"
 
 echo "==> этап 2: AirPlay 2 по SSH"

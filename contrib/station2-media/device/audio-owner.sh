@@ -13,7 +13,7 @@ LOG=$LOGD/owner.log
 # Порт приёмника в hex: 7000 = 1B58 (port в shairport-sync.conf, 5.6+ берёт его оттуда)
 AP_PORT=1B58
 SP_MATCH="$B/shairport-sync"
-SPOTIFY_SINK="$B/aplay -q -D spotify"
+SPOTIFY_SINK=$SPOTIFY_OUT
 YTM_SINK="$B/aplay -q -D youtube"
 STATE=idle
 # Первый подъём пропавших — не раньше чем через минуту: при старте ap2.sh приёмник и
@@ -56,8 +56,11 @@ release_for_airplay() {
   while [ "$i" -lt 40 ]; do
     sp_holds_pcm && return 0
     airplay_session || return 0
-    P=$(pids_matching "$MEDIAD_MATCH" | head -1)
-    [ -n "$P" ] && kill -9 "$P" 2>/dev/null
+    # с Alisa Voice mediad не убиваем (common.sh, alisa_running) — ждём, пока отпустит
+    if ! alisa_running; then
+      P=$(pids_matching "$MEDIAD_MATCH" | head -1)
+      [ -n "$P" ] && kill -9 "$P" 2>/dev/null
+    fi
     sleep 0.3
     i=$((i+1))
   done
@@ -101,6 +104,32 @@ revive_missing() {
 
 trim_log "$LOG"
 while :; do
+  # Чат с ChatGPT (метку ставит voice-spotify.sh): звук его, mediad Алисы ему нужен.
+  # Метку снимаем сами, если клиента нет или разговор кончился без «закрой чат».
+  if chat_active; then
+    ph=$(alisa_phase)
+    age=$(( $(date +%s) - $(cat "$CHAT_FLAG" 2>/dev/null || echo 0) ))
+    if [ -z "$ph" ] || { [ "$ph" = idle ] && [ "$age" -gt 20 ]; }; then
+      rm -f "$CHAT_FLAG"
+      echo "$(date): чат с ChatGPT закончился" >> "$LOG"
+      # Клиент упал посреди чата (его монитор уже вернул обычную Алису) — поднимаем, если у
+      # Alisa Voice включён автозапуск; сам он поднимается только при загрузке
+      if [ -z "$ph" ] && [ -f /data/opt/alisa-cli/native-autostart ]; then
+        echo "$(date): клиент Alisa Voice упал — запускаю заново" >> "$LOG"
+        # run.sh start затирает свой журнал — сохраняем, чтобы видеть причину
+        cp /tmp/alisa-standalone/daemon.log "$LOGD/alisa-crash.log" 2>/dev/null
+        /data/opt/alisa-standalone/run.sh start >/dev/null 2>&1
+      fi
+    else
+      if [ "$STATE" != chat ]; then
+        echo "$(date): чат с ChatGPT — наши плееры ждут" >> "$LOG"
+        STATE=chat
+      fi
+      start_mediad
+      sleep 2
+      continue
+    fi
+  fi
   if airplay_session || sp_holds_pcm; then
     if [ "$STATE" != airplay ]; then
       echo "$(date): AirPlay пошёл — освобождаю звук" >> "$LOG"
