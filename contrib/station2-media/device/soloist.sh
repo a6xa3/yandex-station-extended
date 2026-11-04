@@ -47,26 +47,7 @@ piping() { [ -n "$(pids_matching "$PAREC")" ]; }
 # Громкость общая с Алисой. Soloist ставит громкость своему потоку в PulseAudio и
 # сам подхватывает её изменения, поэтому поток — это ползунок Spotify. Звук PulseAudio
 # не приглушает (run_pulse), его громкость — только Master колонки.
-# Проценты Spotify — доля амплитуды, как у большинства колонок: 13% ≈ −18 дБ (Алиса на 5),
-# 50% = −6 дБ. Master 0..255 — это −36..0 дБ (asound.conf), шаг 36/255 дБ = множитель
-# амплитуды 1,016387; awk на колонке без математики, поэтому степень — циклом.
-master_get() {
-  ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -D default get Master |
-    sed -n 's/.*Playback \([0-9]*\) \[.*/\1/p' | head -1
-}
-master_set() { ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -q -D default set Master "$1"; }
-stream_of() { # Master -> поток 0..65536
-  x=$((65536 << 16)) i=$1
-  while [ "$i" -lt 255 ]; do x=$((x * 1000000 / 1016387)) i=$((i + 1)); done
-  echo $((x >> 16))
-}
-master_of() { # поток -> ближайший сверху Master
-  t=$(($1 << 16)) x=$((65536 << 16)) m=255
-  while [ "$m" -gt 0 ] && [ $((x * 1000000 / 1016387)) -ge "$t" ]; do
-    x=$((x * 1000000 / 1016387)) m=$((m - 1))
-  done
-  echo "$m"
-}
+# Пересчёт ползунка в Master — master_of/stream_of из common.sh.
 # Ползунок Spotify сдвинулся — двигаем Master; сдвинулся Master (панель, голос) или
 # поток новый — двигаем ползунок. Сдвиги меньше 1,5% — округление при обмене со
 # Spotify, а не ползунок.

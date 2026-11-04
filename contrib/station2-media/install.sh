@@ -55,7 +55,8 @@ cp "$HERE/device/etc/"* "$TMP/ap2/etc/"
 cp "$KEY.pub" "$TMP/ap2/etc/authorized_keys"
 if [ -n "$NAME" ]; then
   sed -i "s/^SPOTIFY_NAME=.*/SPOTIFY_NAME=\"$NAME\"/" "$TMP/ap2/common.sh"
-  sed -i "s/^\( *name = \)\"[^\"]*\"/\1\"$NAME\"/" "$TMP/ap2/etc/shairport-sync.conf"
+  # только имя колонки: name есть и у канала в разделе pipe
+  sed -i "s/^\( *name = \)\"[^\"]*\"\(.*как колонка видна\)/\1\"$NAME\"\2/" "$TMP/ap2/etc/shairport-sync.conf"
 fi
 # Имя хоста для avahi — то, что колонка уже публикует по mDNS (hostname у неё другой)
 # dig есть в macOS; в Linux его часто нет (dnsutils), там пробуем avahi-resolve-address

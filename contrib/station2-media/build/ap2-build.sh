@@ -61,7 +61,7 @@ cd "$SRC/shairport-sync"
 make distclean >/dev/null 2>&1 || true
 autoreconf -fi >/dev/null 2>&1
 PKG_CONFIG_PATH="$FFOUT/lib/pkgconfig" ./configure --sysconfdir=/etc \
-  --with-alsa --with-soxr --with-avahi --with-ssl=openssl \
+  --with-alsa --with-pipe --with-soxr --with-avahi --with-ssl=openssl \
   --with-airplay-2 --with-metadata --with-piddir=/run \
   >/tmp/spscfg.log 2>&1 || { tail -40 /tmp/spscfg.log; exit 1; }
 make -j"$(nproc)" >/tmp/spsmake.log 2>&1 || { tail -40 /tmp/spsmake.log; exit 1; }

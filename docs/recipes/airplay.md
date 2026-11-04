@@ -341,6 +341,26 @@ KEY=~/.ssh/yandex_mini2 KNOWN=~/.ssh/known_hosts_mini2 NAME="Станция Ми
 - `shairport-sync` идёт с `chrt -r 30`: без реального времени звук делит процессор с демонами
   Яндекса.
 
+### Вывод в общий dmix { #station-2-shared }
+
+**Проверено на Станции 2 04.11.2026:** звук с iPhone чистый, громкость с iPhone и с панели общая.
+Раньше `shairport-sync` выводил звук своим ALSA и занимал `hw:0,0` монопольно, а распорядитель на это время
+убивал mediad Алисы. Делить системный `dmix` он не мог: набор 64-битный (musl), Алиса 32-битная, а `dmix`
+хранит состояние в общей памяти, и у 32- и 64-битной `alsa-lib` оно разное. Из-за этого Алиса молчала, а
+клиент [ChatGPT Voice](llm.md#chatgpt-station2) падал, если чат открывали во время музыки.
+
+- `shairport-sync` собран с `--with-pipe` и пишет в канал `/run/ap2-airplay.fifo`. Формат задаётся явно
+  (`output_format = "S16_LE"`, `output_rate = 44100`, `output_channels = 2`): по умолчанию `"auto"` —
+  родной формат потока, и звук искажается до неузнаваемости.
+- `ap2.sh run-airplay-out` в цикле читает канал системным `/usr/bin/aplay` (той же `alsa-lib`, что у Алисы)
+  в `airplay_shared` из `etc/asound-shared.conf`: `AP2 Duck` → `Master` → системный `dmix_spk_plug`.
+- Громкость: `ignore_volume_control = "yes"`, а `run_this_when_volume_is_set` вызывает `airplay-volume.sh`,
+  который ставит `Master`. Громкость AirPlay (−30…0, линейно по ползунку) пересчитывается как у Spotify —
+  доля амплитуды; линейно по дБ нижняя половина ползунка была почти тишиной.
+- Распорядитель в этом режиме mediad и приёмник не трогает; на время чата ChatGPT приглушает музыку до 25%.
+- `disable_standby_mode = "auto"` у ALSA-вывода держал устройство открытым, пока iPhone или Mac подключён
+  как выход AirPlay без звука, — Алиса молчала. Для ALSA-вывода нужно `"never"`.
+
 ### Обновления
 
 `yandex-noupdate.sh` подменяет ключ, заглушает `device_ota_update.sh` и убирает `updatesd`. На
