@@ -52,6 +52,8 @@ youtube_playing() {
 # Супервизор quasar поднимает mediad обратно, поэтому одного kill мало:
 # добиваем, пока приёмник реально не займёт устройство.
 release_for_airplay() {
+  # вывод в общий dmix (ap2.sh run-airplay-out) — делить устройство не с кем
+  airplay_shared && return 0
   i=0
   while [ "$i" -lt 40 ]; do
     sp_holds_pcm && return 0
@@ -79,7 +81,8 @@ wait_pcm_free() {
 revive_missing() {
   now=$(date +%s)
   [ $((now - LAST_REVIVE)) -ge 60 ] || return 0
-  if [ -z "$(sp_pid)" ]; then
+  if [ -z "$(sp_pid)" ] ||
+     { airplay_shared && [ -z "$(pids_matching "$AP/ap2.sh run-airplay-out")" ]; }; then
     LAST_REVIVE=$now
     echo "$(date): приёмник AirPlay пропал — поднимаю заново" >> "$LOG"
     "$AP/ap2.sh" receiver
@@ -112,6 +115,7 @@ while :; do
     if [ -z "$ph" ] || { [ "$ph" = idle ] && [ "$age" -gt 20 ]; }; then
       rm -f "$CHAT_FLAG"
       echo "$(date): чат с ChatGPT закончился" >> "$LOG"
+      [ -f /tmp/ap2-duck ] || duck_set 100%
       # Клиент упал посреди чата (его монитор уже вернул обычную Алису) — поднимаем, если у
       # Alisa Voice включён автозапуск; сам он поднимается только при загрузке
       if [ -z "$ph" ] && [ -f /data/opt/alisa-cli/native-autostart ]; then
@@ -124,6 +128,9 @@ while :; do
       if [ "$STATE" != chat ]; then
         echo "$(date): чат с ChatGPT — наши плееры ждут" >> "$LOG"
         STATE=chat
+        # AirPlay с колонки на паузу не поставить — пока идёт чат, приглушаем, как на время,
+        # пока Алиса слушает (voice-spotify.sh, DUCK_LEVEL)
+        duck_set 25%
       fi
       start_mediad
       sleep 2
@@ -151,14 +158,17 @@ while :; do
     case "$STATE" in
       airplay)
         echo "$(date): AirPlay закончился — возвращаю Алису" >> "$LOG"
-        for p in $(pids_matching "$SP_MATCH"); do kill "$p" 2>/dev/null; done
-        wait_pcm_free
+        # с выводом в общий dmix приёмник устройство не держит — перезапускать незачем
+        if ! airplay_shared; then
+          for p in $(pids_matching "$SP_MATCH"); do kill "$p" 2>/dev/null; done
+          wait_pcm_free
+        fi
         start_mediad
         "$AP/ap2.sh" receiver
         ;;
       spotify|youtube)
         echo "$(date): $STATE на паузе или остановлен — возвращаю Алису" >> "$LOG"
-        wait_pcm_free
+        airplay_shared || wait_pcm_free
         start_mediad
         ;;
       *)

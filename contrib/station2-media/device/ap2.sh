@@ -79,7 +79,27 @@ run_sps() {
   exec $(audio_prio) "$B/shairport-sync" -c "$E/shairport-sync.conf" >>"$LOGD/sps.log" 2>&1
 }
 
+# Вывод AirPlay в общий dmix: shairport пишет в канал, системный aplay (той же alsa-lib, что
+# у Алисы) несёт звук через AP2 Duck и Master. aplay ждёт писателя на открытии канала и
+# выходит, когда shairport его закрывает, — поэтому в цикле.
+run_airplay_out() {
+  [ -p "$AIRPLAY_FIFO" ] || { rm -f "$AIRPLAY_FIFO"; mkfifo -m 600 "$AIRPLAY_FIFO"; }
+  export ALSA_CONFIG_PATH=$E/asound-shared.conf
+  trim_log "$LOGD/airplay-out.log"
+  while :; do
+    # shellcheck disable=SC2046
+    $(audio_prio) /usr/bin/aplay -q -D airplay_shared -f S16_LE -c 2 -r 44100 -t raw \
+      --buffer-time=500000 "$AIRPLAY_FIFO" 2>>"$LOGD/airplay-out.log"
+    sleep 0.2
+  done
+}
+
 start_receiver() {
+  if airplay_shared; then
+    [ -p "$AIRPLAY_FIFO" ] || { rm -f "$AIRPLAY_FIFO"; mkfifo -m 600 "$AIRPLAY_FIFO"; }
+    [ -n "$(pids_matching "$SELF run-airplay-out")" ] ||
+      spawn /run/ap2-airplay-out.pid /bin/sh "$SELF" run-airplay-out
+  fi
   [ -n "$(pids_matching "$B/shairport-sync")" ] && return 0
   spawn /run/ap2-sps.pid /bin/sh "$SELF" run-sps
 }
@@ -168,7 +188,7 @@ start_all() {
 
 stop_all() {
   for m in "$AP/audio-owner.sh" "$AP/voice-spotify.sh" "$B/alice-text" "$SELF run-avahi" \
-           "$B/shairport-sync" "$B/librespot" "$SPOTIFY_OUT" "$AP/ytm/ytmd.py" \
+           "$B/shairport-sync" "$SELF run-airplay-out" "$AIRPLAY_OUT" "$B/librespot" "$SPOTIFY_OUT" "$AP/ytm/ytmd.py" \
            "$B/ytm-dec" "$B/aplay -q -D youtube" avahi-daemon "$B/nqptp" "$B/dbus-daemon"; do
     for p in $(pids_matching "$m"); do kill "$p" 2>/dev/null; done
   done
@@ -181,7 +201,7 @@ stop_all() {
 
 show_status() {
   for m in "$B/dropbear" "$B/dbus-daemon" avahi-daemon "$B/nqptp" "$B/shairport-sync" \
-           "$B/librespot" "$SPOTIFY_OUT" "$AP/ytm/ytmd.py" "$B/aplay -q -D youtube" \
+           "$SELF run-airplay-out" "$B/librespot" "$SPOTIFY_OUT" "$AP/ytm/ytmd.py" "$B/aplay -q -D youtube" \
            "$AP/audio-owner.sh" "$AP/voice-spotify.sh" "$MEDIAD_MATCH"; do
     printf '%-40s %s\n' "${m##*/}" "$(pids_matching "$m" | tr '\n' ' ')"
   done
@@ -207,6 +227,7 @@ case "$1" in
   spotify)   start_spotify ;;
   ytm)       start_ytm ;;
   run-sps)   run_sps ;;
+  run-airplay-out) run_airplay_out ;;
   run-spotify) run_spotify ;;
   run-ytm)   run_ytm ;;
   run-avahi) run_avahi ;;

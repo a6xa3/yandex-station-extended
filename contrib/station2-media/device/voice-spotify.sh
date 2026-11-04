@@ -16,8 +16,6 @@ DUCK_MAX_SECONDS=15                # страховка, если «свобод
 
 note() { echo "$(date): $*" >> "$LOG"; }
 
-duck_set() { ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -q -D default set "AP2 Duck" "$1" 2>/dev/null; }
-
 # Пока Алиса слушает, музыка AirPlay и Spotify тише — иначе команда тонет в ней
 duck_on() {
   mark=$(date +%s)
@@ -138,7 +136,8 @@ handle() {
   # Состояние Алисы от alice-text: 1 — слушает, 3 — фраза распознана, 0 — свободна
   case "$t" in
     "@state 1") duck_on; return 0 ;;
-    "@state 0") [ -f "$DUCK" ] && duck_off; return 0 ;;
+    # во время чата приглушение держит распорядитель звука (audio-owner.sh)
+    "@state 0") [ -f "$DUCK" ] && ! chat_active && duck_off; return 0 ;;
     @state\ *) return 0 ;;
   esac
   # Фразы чата Alisa Voice (её commands.txt по умолчанию): клиент через секунду попросит

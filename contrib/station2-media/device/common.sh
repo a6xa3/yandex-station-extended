@@ -23,6 +23,35 @@ soloist_ready() { [ ! -x "$B/librespot" ] && [ -s "$SOLOIST/etc/api-key" ]; }
 CHAT_FLAG=/tmp/ap2-chat
 # Вывод Spotify (spotify-sink.sh): наш aplay с -D spotify или системный с -D spotify_shared
 SPOTIFY_OUT="aplay -q -D spotify"
+# Вывод AirPlay: shairport пишет в канал, системный aplay несёт его в общий dmix
+AIRPLAY_FIFO=/run/ap2-airplay.fifo
+AIRPLAY_OUT="aplay -q -D airplay_shared"
+airplay_shared() { grep -q '^ *output_backend = "pipe"' "$E/shairport-sync.conf" 2>/dev/null; }
+
+# Громкость с телефона (Spotify, AirPlay) -> Master. Ползунок — доля амплитуды, как у
+# большинства колонок: 13% ≈ −18 дБ (Алиса на 5), 50% = −6 дБ. Master 0..255 — это
+# −36..0 дБ (asound.conf), шаг 36/255 дБ = множитель амплитуды 1,016387; awk на колонке
+# без математики, поэтому степень — циклом. Ползунок — 0..65536.
+master_get() {
+  ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -D default get Master |
+    sed -n 's/.*Playback \([0-9]*\) \[.*/\1/p' | head -1
+}
+master_set() { ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -q -D default set Master "$1"; }
+stream_of() { # Master -> ползунок 0..65536
+  x=$((65536 << 16)) i=$1
+  while [ "$i" -lt 255 ]; do x=$((x * 1000000 / 1016387)) i=$((i + 1)); done
+  echo $((x >> 16))
+}
+master_of() { # ползунок -> ближайший сверху Master
+  t=$(($1 << 16)) x=$((65536 << 16)) m=255
+  while [ "$m" -gt 0 ] && [ $((x * 1000000 / 1016387)) -ge "$t" ]; do
+    x=$((x * 1000000 / 1016387)) m=$((m - 1))
+  done
+  echo "$m"
+}
+
+# Регулятор AP2 Duck: приглушение нашей музыки (asound.conf) — пока Алиса слушает и пока идёт чат
+duck_set() { ALSA_CONFIG_PATH=$E/asound.conf "$B/amixer" -q -D default set "AP2 Duck" "$1" 2>/dev/null; }
 ALISA_BIN=/data/opt/alisa-standalone/bin/alisa-standalone
 chat_active() { [ -f "$CHAT_FLAG" ]; }
 # Монитор Alisa Voice запущен: mediad Алисы связан с её клиентом, убивать его нельзя —
