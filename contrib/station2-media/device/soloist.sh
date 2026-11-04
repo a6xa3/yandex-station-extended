@@ -87,9 +87,11 @@ sync_volume() { # индекс громкость_потока
   last_idx=$1 last_m=$m
 }
 
+soloist_ctl() { "$S/bin/soloist" ctl -D "$S/data" "$1" >/dev/null 2>&1; }
+
 stop_pipe() {
   for p in $(pids_matching "$PAREC") $(pids_matching "/bin/sh $AP/spotify-sink.sh") \
-           $(pids_matching "$B/aplay -q -D spotify"); do
+           $(pids_matching "$SPOTIFY_OUT"); do
     kill "$p" 2>/dev/null
   done
 }
@@ -116,7 +118,11 @@ run_watch() {
     idx=$(printf '%s\n' "$info" | sed -n 's/^Sink Input #//p' | head -1)
     v=$(printf '%s\n' "$info" | sed -n 's/.*Volume: front-left: \([0-9]*\) .*/\1/p' | head -1)
     [ -n "$idx" ] && [ -n "$v" ] && sync_volume "$idx" "$v"
-    if printf '%s\n' "$info" | grep -q 'Corked: no'; then
+    if chat_active; then
+      # чат с ChatGPT: звук ему, Spotify на паузу (common.sh, CHAT_FLAG)
+      printf '%s\n' "$info" | grep -q 'Corked: no' && soloist_ctl pause
+      piping && stop_pipe
+    elif printf '%s\n' "$info" | grep -q 'Corked: no'; then
       quiet_since=
       piping || { "$PAREC" -d soloist.monitor --raw --format=s16le --rate=44100 --channels=2 \
                     --latency-msec=100 | /bin/sh "$AP/spotify-sink.sh"; } &
@@ -157,5 +163,6 @@ case "$1" in
   run-pulse)   run_pulse ;;
   run-soloist) run_soloist ;;
   run-watch)   run_watch ;;
-  *) echo "usage: $0 start|stop|status" >&2; exit 1 ;;
+  release)     soloist_ctl pause; stop_pipe ;;   # отдать звук сразу (чат с ChatGPT)
+  *) echo "usage: $0 start|stop|status|release" >&2; exit 1 ;;
 esac

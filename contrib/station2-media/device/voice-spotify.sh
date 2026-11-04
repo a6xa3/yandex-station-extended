@@ -71,7 +71,7 @@ alice_reply() {
 # Soloist принимает команды локально за ~0,1 с, Web API через облако — около секунды
 soloist_ctl() { soloist_ready && "$SOLOIST/bin/soloist" ctl -D "$SOLOIST/data" "$1" >/dev/null 2>&1; }
 
-spotify_playing_now() { [ -n "$(pids_matching "$B/aplay -q -D spotify")" ]; }
+spotify_playing_now() { [ -n "$(pids_matching "$SPOTIFY_OUT")" ]; }
 
 # Spotify играет или включался голосом недавно — тогда «пауза», «дальше» для него
 spotify_recent() {
@@ -116,6 +116,23 @@ play_spotify() { # «маркула», «песню X», «альбом X», «�
   fi
 }
 
+# Метка чата (common.sh) и освобождение звука: Spotify — на паузу, наши aplay — прочь.
+# AirPlay на паузу с колонки не поставить (shairport собран без D-Bus), поэтому приёмник
+# с активным звуком останавливаем; после чата его поднимет распорядитель звука.
+# Счёт на десятые доли секунды: клиент просит звук примерно через секунду после фразы.
+# Поэтому сначала метка (чтобы наблюдатель Soloist не поднял вывод снова) и kill -9 —
+# обычный сигнал aplay доигрывает буфер, — а пауза Spotify уже потом, в фоне.
+room_for_chat() {
+  [ -x "$ALISA_BIN" ] || return 0
+  date +%s > "$CHAT_FLAG"
+  for p in $(pids_matching "$B/aplay -q -D") $(pids_matching "$SPOTIFY_OUT"); do kill -9 "$p" 2>/dev/null; done
+  sp=$(pids_matching "$B/shairport-sync" | head -1)
+  holds_pcm "$sp" && { kill -9 "$sp" 2>/dev/null; note "AirPlay остановлен на время чата"; }
+  note "чат с ChatGPT: отдал звук"
+  [ -x "$SOLOIST/soloist.sh" ] && "$SOLOIST/soloist.sh" release &
+  start_mediad
+}
+
 handle() {
   t=$1
   # Состояние Алисы от alice-text: 1 — слушает, 3 — фраза распознана, 0 — свободна
@@ -123,6 +140,12 @@ handle() {
     "@state 1") duck_on; return 0 ;;
     "@state 0") [ -f "$DUCK" ] && duck_off; return 0 ;;
     @state\ *) return 0 ;;
+  esac
+  # Фразы чата Alisa Voice (её commands.txt по умолчанию): клиент через секунду попросит
+  # звук, и если его держит наш плеер — упадёт. Отдаём звук сразу, не дожидаясь ответа.
+  case "$t" in
+    *ткрой\ чат*|*оздай\ новый\ чат*|*ткрой\ предыдущий\ чат*) room_for_chat; return 0 ;;
+    *акрой\ чат*) [ -f "$CHAT_FLAG" ] && { rm -f "$CHAT_FLAG"; note "чат закрыт"; }; return 0 ;;
   esac
   # «… в ютубе» — команда для ytmd.py (YouTube Music), не для Spotify
   case "$t" in *ютуб*|*Ютуб*|*youtube*|*YouTube*) return 0 ;; esac

@@ -15,6 +15,22 @@ SPOTIFY_VOLUME_RANGE=25
 # Spotify Soloist (soloist.sh) — вместо librespot, когда тот выключен
 SOLOIST=/data/local/opt/soloist
 soloist_ready() { [ ! -x "$B/librespot" ] && [ -s "$SOLOIST/etc/api-key" ]; }
+
+# Разговор с ChatGPT (Alisa Voice). Его клиент выводит звук через общий dmix, а наши
+# плееры занимают hw:0,0 монопольно (они 64-битные, dmix с 32-битной Алисой не делят):
+# если звук занят, клиент падает целиком и монитор возвращает обычную Алису. Поэтому на
+# время чата — метка: наши плееры звук не берут и mediad Алисы не трогают.
+CHAT_FLAG=/tmp/ap2-chat
+# Вывод Spotify (spotify-sink.sh): наш aplay с -D spotify или системный с -D spotify_shared
+SPOTIFY_OUT="aplay -q -D spotify"
+ALISA_BIN=/data/opt/alisa-standalone/bin/alisa-standalone
+chat_active() { [ -f "$CHAT_FLAG" ]; }
+# Монитор Alisa Voice запущен: mediad Алисы связан с её клиентом, убивать его нельзя —
+# клиент падает на следующем чате. Ждём, пока mediad сам отпустит звук (в простое он его не держит).
+alisa_running() { [ -n "$(pids_matching "/data/opt/alisa-standalone/run.sh monitor")" ]; }
+alisa_phase() { # starting|opening|active — идёт разговор; idle — нет; пусто — клиент не запущен
+  "$ALISA_BIN" status 2>/dev/null | sed -n 's/^  "phase": *"\([a-z_]*\)".*/\1/p'
+}
 export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/ap2_bus
 # из SSH-сессии dropbear приходит PATH=/usr/bin:/bin, а start-stop-daemon лежит в /sbin
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin

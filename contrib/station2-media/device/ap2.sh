@@ -168,7 +168,7 @@ start_all() {
 
 stop_all() {
   for m in "$AP/audio-owner.sh" "$AP/voice-spotify.sh" "$B/alice-text" "$SELF run-avahi" \
-           "$B/shairport-sync" "$B/librespot" "$B/aplay -q -D spotify" "$AP/ytm/ytmd.py" \
+           "$B/shairport-sync" "$B/librespot" "$SPOTIFY_OUT" "$AP/ytm/ytmd.py" \
            "$B/ytm-dec" "$B/aplay -q -D youtube" avahi-daemon "$B/nqptp" "$B/dbus-daemon"; do
     for p in $(pids_matching "$m"); do kill "$p" 2>/dev/null; done
   done
@@ -181,7 +181,7 @@ stop_all() {
 
 show_status() {
   for m in "$B/dropbear" "$B/dbus-daemon" avahi-daemon "$B/nqptp" "$B/shairport-sync" \
-           "$B/librespot" "$B/aplay -q -D spotify" "$AP/ytm/ytmd.py" "$B/aplay -q -D youtube" \
+           "$B/librespot" "$SPOTIFY_OUT" "$AP/ytm/ytmd.py" "$B/aplay -q -D youtube" \
            "$AP/audio-owner.sh" "$AP/voice-spotify.sh" "$MEDIAD_MATCH"; do
     printf '%-40s %s\n' "${m##*/}" "$(pids_matching "$m" | tr '\n' ' ')"
   done
